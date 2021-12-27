@@ -283,23 +283,24 @@ extern "C" DWORD fork(_Out_ LPPROCESS_INFORMATION lpProcessInformation) {
   } else {
     // Child process
     FreeConsole();
+
+#ifdef FORKLIB_RESTORE_STDIO
     // Remove these calls to improve performance, at the cost of losing stdio.
-    // #ifdef _DEBUG
     AllocConsole();
     SetStdHandle(STD_INPUT_HANDLE, stdin);
     SetStdHandle(STD_OUTPUT_HANDLE, stdout);
     SetStdHandle(STD_ERROR_HANDLE, stderr);
-    // #endif
+#endif  // FORKLIB_RESTORE_STDIO
     LOG("I'm the child\n");
 
     if (!ConnectCsrChild(csr_region_opt.value())) {
       ExitProcess(1);
     }
 
-    // #ifdef _DEBUG
+#ifdef FORKLIB_RESTORE_STDIO
     // Not safe to do fopen until after ConnectCsrChild
     ReopenStdioHandles();
-    // #endif
+#endif  // FORKLIB_RESTORE_STDIO
 
     return 0;
   }
