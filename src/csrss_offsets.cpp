@@ -8,13 +8,30 @@
 #endif
 
 #define CSR_REGION_MOD_NAME "ntdll.dll"
-#define CSR_REGION_START_SYM_X64 "ntdll!CsrServerApiRoutine"
+#define CSR_REGION_START_SYM "ntdll!CsrServerApiRoutine"
 #define CSR_REGION_END_SYM_X64 "ntdll!CsrHeap"
-#define CSR_REGION_START_SYM_X86 "ntdll!CsrServerApiRoutine"
 #define CSR_REGION_END_SYM_X86 "ntdll!CsrInitOnceDone"
+#define RTL_CUR_DIR_REF_SYM "ntdll!RtlpCurDirRef"
 
 static bool GetCsrRegionInfoNative(CsrRegion* region_out_ptr);
 static bool GetCsrRegionInfoWow64(CsrRegion* region_out_ptr);
+
+void CsrRegion::ResetNative() const {
+  ::memset(reinterpret_cast<void*>(data_offset), 0, data_size);
+  ::memset(reinterpret_cast<void*>(cur_dir_ref_offset), 0, sizeof(void*));
+}
+
+#ifndef _WIN64
+void CsrRegion::ResetWow64() const {
+  char tmp[512] = {0};
+  if (data_size_wow64 > sizeof(tmp)) {
+    LOG("FORKLIB: Csr data size too big! Fix this in fork.cpp\n");
+    ::ExitProcess(1);
+  }
+  ::setMem64(data_offset_wow64, tmp, data_size_wow64);
+  ::setMem64(cur_dir_ref_offset_wow64, tmp, sizeof(ULONG64));
+}
+#endif  // _WIN64
 
 bool GetCsrRegionInfo(CsrRegion* region_out_ptr) {
   if (region_out_ptr == nullptr) {
@@ -58,19 +75,16 @@ static bool GetCsrRegionInfoNative(CsrRegion* region_out_ptr) {
   p_sym_info->SizeOfStruct = sizeof(*p_sym_info);
   p_sym_info->MaxNameLen = MAX_SYM_NAME;
 
-#ifdef _WIN64
-  if (!::SymFromName(hProcess, CSR_REGION_START_SYM_X64, p_sym_info)) {
-#elif _WIN32
-  if (!::SymFromName(hProcess, CSR_REGION_START_SYM_X86, p_sym_info)) {
-#endif
+  // CsrServerApiRoutine
+  if (!::SymFromName(hProcess, CSR_REGION_START_SYM, p_sym_info)) {
     LOG("SymFromName failed, 0x%X\n", ::GetLastError());
     ::SymUnloadModule64(hProcess, mod_base_addr);
     return false;
   }
-  LOG("Success, ntdll!CsrServerApiRoutine is at 0x%I64X\n",
-      p_sym_info->Address);
-  region_out_ptr->data_offset = reinterpret_cast<void*>(p_sym_info->Address);
+  LOG("ntdll!CsrServerApiRoutine is at 0x%I64X\n", p_sym_info->Address);
+  region_out_ptr->data_offset = p_sym_info->Address;
 
+  // CsrHeap / CsrInitOnceDone
 #ifdef _WIN64
   if (!::SymFromName(hProcess, CSR_REGION_END_SYM_X64, p_sym_info)) {
 #elif _WIN32
@@ -80,10 +94,18 @@ static bool GetCsrRegionInfoNative(CsrRegion* region_out_ptr) {
     ::SymUnloadModule64(hProcess, mod_base_addr);
     return false;
   }
-  LOG("Success, ntdll!CsrHeap is at 0x%I64X\n", p_sym_info->Address);
+  LOG("ntdll!CsrHeap is at 0x%I64X\n", p_sym_info->Address);
   region_out_ptr->data_size =
-      p_sym_info->Address + p_sym_info->Size -
-      reinterpret_cast<ULONG64>(region_out_ptr->data_offset);
+      p_sym_info->Address + p_sym_info->Size - region_out_ptr->data_offset;
+
+  // RtlpCurDirRef
+  if (!::SymFromName(hProcess, RTL_CUR_DIR_REF_SYM, p_sym_info)) {
+    LOG("SymFromName failed, 0x%X\n", ::GetLastError());
+    ::SymUnloadModule64(hProcess, mod_base_addr);
+    return false;
+  }
+  LOG("%s is at 0x%I64X\n", RTL_CUR_DIR_REF_SYM, p_sym_info->Address);
+  region_out_ptr->cur_dir_ref_offset = p_sym_info->Address;
 
   ::SymUnloadModule64(hProcess, mod_base_addr);
   return true;
@@ -126,23 +148,34 @@ static bool GetCsrRegionInfoWow64(CsrRegion* region_out_ptr) {
   p_sym_info->SizeOfStruct = sizeof(*p_sym_info);
   p_sym_info->MaxNameLen = MAX_SYM_NAME;
 
-  if (!::SymFromName(hProcess, CSR_REGION_START_SYM_X64, p_sym_info)) {
+  // CsrServerApiRoutine
+  if (!::SymFromName(hProcess, CSR_REGION_START_SYM, p_sym_info)) {
     LOG("SymFromName failed, 0x%X\n", ::GetLastError());
     ::SymUnloadModule64(hProcess, mod_base_addr);
     return false;
   }
   region_out_ptr->data_offset_wow64 = p_sym_info->Address;
-  LOG("Success, ntdll!CsrServerApiRoutine is at 0x%I64X\n",
+  LOG("%s is at 0x%I64X\n", CSR_REGION_START_SYM,
       region_out_ptr->data_offset_wow64);
 
+  // CsrHeap
   if (!::SymFromName(hProcess, CSR_REGION_END_SYM_X64, p_sym_info)) {
     LOG("SymFromName failed, 0x%X\n", ::GetLastError());
     ::SymUnloadModule64(hProcess, mod_base_addr);
     return false;
   }
-  LOG("Success, ntdll!CsrHeap is at 0x%I64X\n", p_sym_info->Address);
+  LOG("%s is at 0x%I64X\n", CSR_REGION_END_SYM_X64, p_sym_info->Address);
   region_out_ptr->data_size_wow64 = p_sym_info->Address + p_sym_info->Size -
                                     region_out_ptr->data_offset_wow64;
+
+  // RtlpCurDirRef
+  if (!::SymFromName(hProcess, RTL_CUR_DIR_REF_SYM, p_sym_info)) {
+    LOG("SymFromName failed, 0x%X\n", ::GetLastError());
+    ::SymUnloadModule64(hProcess, mod_base_addr);
+    return false;
+  }
+  LOG("%s is at 0x%I64X\n", RTL_CUR_DIR_REF_SYM, p_sym_info->Address);
+  region_out_ptr->cur_dir_ref_offset_wow64 = p_sym_info->Address;
 
   ::SymUnloadModule64(hProcess, mod_base_addr);
   return true;

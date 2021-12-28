@@ -132,21 +132,16 @@ BOOL ConnectCsrChild(const CsrRegion& csr_region) {
   HMODULE ntdll = GetModuleHandleA("ntdll.dll");
 #ifdef _WIN64
   LOG("FORKLIB: Csr data = %p\n", csr_region.data_offset);
-  memset(csr_region.data_offset, 0, csr_region.data_size);
+  csr_region.ResetNative();
 #else
   LOG("FORKLIB: Csr data = %p\n", csr_region.data_offset);
-  memset(csr_region.data_offset, 0, csr_region.data_size);
+  csr_region.ResetNative();
 
   if (bIsWow64) {
     DWORD64 ntdll64 = GetModuleHandle64(L"ntdll.dll");
     LOG("FORKLIB: ntdll 64 = %llx\n", ntdll64);
     LOG("FORKLIB: Csr data 64 = %llx\n", csr_region.data_offset_wow64);
-    char tmp[256] = {0};
-    if (csr_region.data_size_wow64 > sizeof(tmp)) {
-      LOG("FORKLIB: Csr data size too big! Fix this in fork.cpp\n");
-      return FALSE;
-    }
-    setMem64(csr_region.data_offset_wow64, tmp, csr_region.data_size_wow64);
+    csr_region.ResetWow64();
   }
 #endif
 
