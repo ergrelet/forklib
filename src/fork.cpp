@@ -37,7 +37,7 @@ BOOL NotifyCsrssParent(HANDLE hProcess, HANDLE hThread) {
     return FALSE;
   }
 
-  // NTSTATUS result;
+  NTSTATUS result;
   if (bIsWow64) {
     CSR_API_MSG64 csrmsg;
     RtlZeroMemory(&csrmsg, sizeof(csrmsg));
@@ -49,9 +49,10 @@ BOOL NotifyCsrssParent(HANDLE hProcess, HANDLE hThread) {
     csrmsg.CreateProcessRequest.ThreadHandle = (ULONGLONG)hThread;
     csrmsg.CreateProcessRequest.ClientId.UniqueProcess = GetProcessId(hProcess);
     csrmsg.CreateProcessRequest.ClientId.UniqueThread = GetThreadId(hThread);
-    // result = CsrClientCallServer64(&csrmsg, NULL,
-    // CSR_MAKE_API_NUMBER(BASESRV_SERVERDLL_INDEX, BasepCreateProcess),
-    // sizeof(csrmsg.CreateProcessRequest));
+    result = CsrClientCallServer64(
+        &csrmsg, NULL,
+        CSR_MAKE_API_NUMBER(BASESRV_SERVERDLL_INDEX, BasepCreateProcess),
+        sizeof(csrmsg.CreateProcessRequest));
   } else {
     CSR_API_MSG csrmsg;
     RtlZeroMemory(&csrmsg, sizeof(csrmsg));
@@ -69,18 +70,16 @@ BOOL NotifyCsrssParent(HANDLE hProcess, HANDLE hThread) {
         (HANDLE)((size_t)GetProcessId(hProcess));
     csrmsg.CreateProcessRequest.ClientId.UniqueThread =
         (HANDLE)((size_t)GetThreadId(hThread));
-    // result = CsrClientCallServer(&csrmsg, NULL,
-    // CSR_MAKE_API_NUMBER(BASESRV_SERVERDLL_INDEX, BasepCreateProcess),
-    // sizeof(csrmsg.CreateProcessRequest));
+    result = CsrClientCallServer(
+        &csrmsg, NULL,
+        CSR_MAKE_API_NUMBER(BASESRV_SERVERDLL_INDEX, BasepCreateProcess),
+        sizeof(csrmsg.CreateProcessRequest));
   }
 
-  /*
-  if (!NT_SUCCESS(result))
-  {
-          LOG("CsrClientCallServer(BasepCreateThread) failed!\n");
-          return FALSE;
+  if (!NT_SUCCESS(result)) {
+    LOG("CsrClientCallServer(BasepCreateThread) failed!\n");
+    return FALSE;
   }
-  */
 
   LOG("FORKLIB: Successfully notified Csr of child!\n");
   return TRUE;
@@ -259,12 +258,13 @@ extern "C" DWORD fork(_Out_ LPPROCESS_INFORMATION lpProcessInformation) {
     LOG("FORKLIB: Thread ID = %x\n", GetThreadId(hThread));
     LOG("FORKLIB: Result = %d\n", result);
 
-    // Not needed??
+#ifdef FORKLIB_NOTIFY_CSRSS_FROM_PARENT
     if (!NotifyCsrssParent(hProcess, hThread)) {
       LOG("FORKLIB: NotifyCsrssParent failed\n");
       TerminateProcess(hProcess, 1);
       return -1;
     }
+#endif  // FORKLIB_NOTIFY_CSRSS_FROM_PARENT
 
     if (lpProcessInformation) {
       lpProcessInformation->hProcess = hProcess;
@@ -277,10 +277,9 @@ extern "C" DWORD fork(_Out_ LPPROCESS_INFORMATION lpProcessInformation) {
     return GetProcessId(hProcess);
   } else {
     // Child process
-    FreeConsole();
-
 #ifdef FORKLIB_RESTORE_STDIO
     // Remove these calls to improve performance, at the cost of losing stdio.
+    FreeConsole();
     AllocConsole();
     SetStdHandle(STD_INPUT_HANDLE, stdin);
     SetStdHandle(STD_OUTPUT_HANDLE, stdout);

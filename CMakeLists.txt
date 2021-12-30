@@ -6,6 +6,7 @@ project(forklib
 )
 
 option(FORKLIB_RESTORE_STDIO "Restore standard handles in forked processes" ON)
+option(FORKLIB_NOTIFY_CSRSS_FROM_PARENT "Notify CSRSS from parent process when forking" ON)
 option(FORKLIB_BUILD_TESTS "Build executables used for testing" OFF)
 option(FORKLIB_FORCE_SHARED_CRT "Use shared (DLL) run-time lib" OFF)
 

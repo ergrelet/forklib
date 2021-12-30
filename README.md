@@ -10,8 +10,9 @@ all Windows 10 versions.
 $ cmake -B x64
 $ cmake --build x64 --config Release -- -maxcpucount
 ```
-Note: You may want to set the `FORKLIB_RESTORE_STDIO` CMake option to `OFF` if
-you plan to build the library for `winnie`.
+Note: You may want to set the `FORKLIB_NOTIFY_CSRSS_FROM_PARENT` and
+`FORKLIB_RESTORE_STDIO` CMake options to `OFF` if you plan to build the library
+for `winnie`.
 
 ## How to Use
 
