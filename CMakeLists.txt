@@ -22,3 +22,7 @@ endif()
 
 add_subdirectory("src")
 add_subdirectory("wow64ext")
+
+if(FORKLIB_BUILD_TESTS)
+  add_subdirectory("tests")
+endif()

@@ -32,8 +32,3 @@ endif()
 if(FORKLIB_NOTIFY_CSRSS_FROM_PARENT)
   target_compile_definitions(forklib PRIVATE "FORKLIB_NOTIFY_CSRSS_FROM_PARENT")
 endif()
-
-if(FORKLIB_BUILD_TESTS)
-  add_executable(fork_test "fork_test/fork_test.cpp")
-  target_link_libraries(fork_test PRIVATE forklib)
-endif()
