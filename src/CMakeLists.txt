@@ -7,6 +7,8 @@ set(FORKLIB_SRC_FILES
   "csrss.cpp"
   "csrss_offsets.h"
   "csrss_offsets.cpp"
+  "dbghelp_context.h"
+  "dbghelp_context.cpp"
   "handle_inherit.cpp"
   "targetver.h"
   "windows_phnt.h"
@@ -14,7 +16,13 @@ set(FORKLIB_SRC_FILES
   "logging.h"
 )
 
-add_library(forklib SHARED ${FORKLIB_SRC_FILES})
+if(FORKLIB_BUILD_SHARED_LIB)
+  set(FORKLIB_TYPE SHARED)
+else()
+  set(FORKLIB_TYPE STATIC)
+endif()
+
+add_library(forklib ${FORKLIB_TYPE} ${FORKLIB_SRC_FILES})
 target_include_directories(forklib PUBLIC "../include")
 target_include_directories(forklib PRIVATE "phnt/include")
 target_compile_definitions(forklib PRIVATE "_USRDLL")
@@ -23,6 +31,9 @@ if(CMAKE_SIZEOF_VOID_P EQUAL 4)
   target_link_libraries(forklib PRIVATE wow64ext)
 endif()
 
+if(FORKLIB_BUILD_SHARED_LIB)
+  target_compile_definitions(forklib PUBLIC "FORKLIB_SHARED_LIB")
+endif()
 if(FORKLIB_WINDOWS_11)
   target_compile_definitions(forklib PRIVATE "FORKLIB_WINDOWS_11")
 endif()

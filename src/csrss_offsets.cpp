@@ -2,6 +2,7 @@
 
 #include <dbghelp.h>
 
+#include "dbghelp_context.h"
 #include "logging.h"
 #ifndef _WIN64
 #include "wow64ext.h"
@@ -15,6 +16,9 @@
 
 static bool GetCsrRegionInfoNative(CsrRegion* region_out_ptr);
 static bool GetCsrRegionInfoWow64(CsrRegion* region_out_ptr);
+
+// Intializes symbol handler on construction and cleans it up on destruction
+static DbgHelpContext dbghelp_ctx;
 
 void CsrRegion::ResetNative() const {
   ::memset(reinterpret_cast<void*>(data_offset), 0, data_size);

@@ -217,7 +217,7 @@ LONG WINAPI DiscardException(EXCEPTION_POINTERS* ExceptionInfo) {
 }
 #endif
 
-extern "C" DWORD fork(_Out_ LPPROCESS_INFORMATION lpProcessInformation) {
+DWORD fork(_Out_ LPPROCESS_INFORMATION lpProcessInformation) {
   static auto csr_region_opt = []() -> std::optional<CsrRegion> {
     CsrRegion csr_region;
     if (!GetCsrRegionInfo(&csr_region)) {
