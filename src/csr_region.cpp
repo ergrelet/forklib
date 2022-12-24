@@ -1,4 +1,4 @@
-#include "csrss_offsets.h"
+#include "csr_region.h"
 
 #include <dbghelp.h>
 
@@ -14,50 +14,47 @@
 #define CSR_REGION_END_SYM_X86 "ntdll!CsrInitOnceDone"
 #define RTL_CUR_DIR_REF_SYM "ntdll!RtlpCurDirRef"
 
-static bool GetCsrRegionInfoNative(CsrRegion* region_out_ptr);
-static bool GetCsrRegionInfoWow64(CsrRegion* region_out_ptr);
+static std::optional<CsrRegion> GetCsrRegionInfoNative();
+static std::optional<CsrRegion> GetCsrRegionInfoWow64();
 
 // Intializes symbol handler on construction and cleans it up on destruction
 static DbgHelpContext dbghelp_ctx;
 
+std::optional<CsrRegion> CsrRegion::GetForCurrentProcess() {
+#ifndef _WIN64
+  BOOL bIsWow64;
+  if (!IsWow64Process(GetCurrentProcess(), &bIsWow64)) {
+    LOG("IsWow64Process failed!\n");
+    return {};
+  }
+
+  if (bIsWow64) {
+    return GetCsrRegionInfoWow64();
+  }
+#endif  // _WIN64
+
+  return GetCsrRegionInfoNative();
+}
+
 void CsrRegion::ResetNative() const {
-  ::memset(reinterpret_cast<void*>(data_offset), 0, data_size);
+  ::memset(reinterpret_cast<void*>(data_offset), 0,
+           static_cast<size_t>(data_size));
   ::memset(reinterpret_cast<void*>(cur_dir_ref_offset), 0, sizeof(void*));
 }
 
 #ifndef _WIN64
 void CsrRegion::ResetWow64() const {
   char tmp[512] = {0};
-  if (data_size_wow64 > sizeof(tmp)) {
+  if (static_cast<size_t>(data_size_wow64) > sizeof(tmp)) {
     LOG("FORKLIB: Csr data size too big! Fix this in fork.cpp\n");
     ::ExitProcess(1);
   }
-  ::setMem64(data_offset_wow64, tmp, data_size_wow64);
+  ::setMem64(data_offset_wow64, tmp, static_cast<size_t>(data_size_wow64));
   ::setMem64(cur_dir_ref_offset_wow64, tmp, sizeof(ULONG64));
 }
 #endif  // _WIN64
 
-bool GetCsrRegionInfo(CsrRegion* region_out_ptr) {
-  if (region_out_ptr == nullptr) {
-    return false;
-  }
-
-#ifndef _WIN64
-  BOOL bIsWow64;
-  if (!IsWow64Process(GetCurrentProcess(), &bIsWow64)) {
-    LOG("IsWow64Process failed!\n");
-    return FALSE;
-  }
-
-  if (bIsWow64) {
-    return GetCsrRegionInfoWow64(region_out_ptr);
-  }
-#endif  // _WIN64
-
-  return GetCsrRegionInfoNative(region_out_ptr);
-}
-
-static bool GetCsrRegionInfoNative(CsrRegion* region_out_ptr) {
+static std::optional<CsrRegion> GetCsrRegionInfoNative() {
   const HANDLE hProcess = ::GetCurrentProcess();
   const auto mod_base_addr =
       reinterpret_cast<DWORD64>(::GetModuleHandleA(CSR_REGION_MOD_NAME));
@@ -71,7 +68,7 @@ static bool GetCsrRegionInfoNative(CsrRegion* region_out_ptr) {
                          0))       // flags - not required
   {
     LOG("SymLoadModuleEx failed, 0x%X\n", ::GetLastError());
-    return false;
+    return {};
   }
 
   char buffer[sizeof(SYMBOL_INFO) + MAX_SYM_NAME] = {0};
@@ -83,10 +80,11 @@ static bool GetCsrRegionInfoNative(CsrRegion* region_out_ptr) {
   if (!::SymFromName(hProcess, CSR_REGION_START_SYM, p_sym_info)) {
     LOG("SymFromName failed, 0x%X\n", ::GetLastError());
     ::SymUnloadModule64(hProcess, mod_base_addr);
-    return false;
+    return {};
   }
   LOG("ntdll!CsrServerApiRoutine is at 0x%I64X\n", p_sym_info->Address);
-  region_out_ptr->data_offset = p_sym_info->Address;
+  CsrRegion region_out{};
+  region_out.data_offset = p_sym_info->Address;
 
   // CsrHeap / CsrInitOnceDone
 #ifdef _WIN64
@@ -96,37 +94,39 @@ static bool GetCsrRegionInfoNative(CsrRegion* region_out_ptr) {
 #endif
     LOG("SymFromName failed, 0x%X\n", ::GetLastError());
     ::SymUnloadModule64(hProcess, mod_base_addr);
-    return false;
+    return {};
   }
   LOG("ntdll!CsrHeap is at 0x%I64X\n", p_sym_info->Address);
-  region_out_ptr->data_size =
-      p_sym_info->Address + p_sym_info->Size - region_out_ptr->data_offset;
+  region_out.data_size =
+      p_sym_info->Address + p_sym_info->Size - region_out.data_offset;
 
   // RtlpCurDirRef
   if (!::SymFromName(hProcess, RTL_CUR_DIR_REF_SYM, p_sym_info)) {
     LOG("SymFromName failed, 0x%X\n", ::GetLastError());
     ::SymUnloadModule64(hProcess, mod_base_addr);
-    return false;
+    return {};
   }
   LOG("%s is at 0x%I64X\n", RTL_CUR_DIR_REF_SYM, p_sym_info->Address);
-  region_out_ptr->cur_dir_ref_offset = p_sym_info->Address;
+  region_out.cur_dir_ref_offset = p_sym_info->Address;
 
   ::SymUnloadModule64(hProcess, mod_base_addr);
-  return true;
+  return region_out;
 }
 
 #ifndef _WIN64
 
-static bool GetCsrRegionInfoWow64(CsrRegion* region_out_ptr) {
+static std::optional<CsrRegion> GetCsrRegionInfoWow64() {
   // Get native symbols info
-  if (!GetCsrRegionInfoNative(region_out_ptr)) {
-    return false;
+  auto region_out_opt = GetCsrRegionInfoNative();
+  if (!region_out_opt.has_value()) {
+    return {};
   }
+  auto& region_out = region_out_opt.value();
 
   PVOID old_redir_value{};
   if (!::Wow64DisableWow64FsRedirection(&old_redir_value)) {
     LOG("Wow64DisableWow64FsRedirection failed, 0x%X\n", ::GetLastError());
-    return false;
+    return {};
   }
 
   const HANDLE hProcess = ::GetCurrentProcess();
@@ -143,7 +143,7 @@ static bool GetCsrRegionInfoWow64(CsrRegion* region_out_ptr) {
   {
     LOG("SymLoadModuleEx failed, 0x%X\n", ::GetLastError());
     ::Wow64RevertWow64FsRedirection(old_redir_value);
-    return false;
+    return {};
   }
   ::Wow64RevertWow64FsRedirection(old_redir_value);
 
@@ -156,33 +156,32 @@ static bool GetCsrRegionInfoWow64(CsrRegion* region_out_ptr) {
   if (!::SymFromName(hProcess, CSR_REGION_START_SYM, p_sym_info)) {
     LOG("SymFromName failed, 0x%X\n", ::GetLastError());
     ::SymUnloadModule64(hProcess, mod_base_addr);
-    return false;
+    return {};
   }
-  region_out_ptr->data_offset_wow64 = p_sym_info->Address;
-  LOG("%s is at 0x%I64X\n", CSR_REGION_START_SYM,
-      region_out_ptr->data_offset_wow64);
+  region_out.data_offset_wow64 = p_sym_info->Address;
+  LOG("%s is at 0x%I64X\n", CSR_REGION_START_SYM, region_out.data_offset_wow64);
 
   // CsrHeap
   if (!::SymFromName(hProcess, CSR_REGION_END_SYM_X64, p_sym_info)) {
     LOG("SymFromName failed, 0x%X\n", ::GetLastError());
     ::SymUnloadModule64(hProcess, mod_base_addr);
-    return false;
+    return {};
   }
   LOG("%s is at 0x%I64X\n", CSR_REGION_END_SYM_X64, p_sym_info->Address);
-  region_out_ptr->data_size_wow64 = p_sym_info->Address + p_sym_info->Size -
-                                    region_out_ptr->data_offset_wow64;
+  region_out.data_size_wow64 =
+      p_sym_info->Address + p_sym_info->Size - region_out.data_offset_wow64;
 
   // RtlpCurDirRef
   if (!::SymFromName(hProcess, RTL_CUR_DIR_REF_SYM, p_sym_info)) {
     LOG("SymFromName failed, 0x%X\n", ::GetLastError());
     ::SymUnloadModule64(hProcess, mod_base_addr);
-    return false;
+    return {};
   }
   LOG("%s is at 0x%I64X\n", RTL_CUR_DIR_REF_SYM, p_sym_info->Address);
-  region_out_ptr->cur_dir_ref_offset_wow64 = p_sym_info->Address;
+  region_out.cur_dir_ref_offset_wow64 = p_sym_info->Address;
 
   ::SymUnloadModule64(hProcess, mod_base_addr);
-  return true;
+  return region_out_opt;
 }
 
 #endif  // _WIN64

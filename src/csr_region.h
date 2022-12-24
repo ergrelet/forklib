@@ -1,6 +1,8 @@
 #pragma once
 
-#include "windows_phnt.h"
+#include <Windows.h>
+
+#include <optional>
 
 struct CsrRegion {
   // Csr*
@@ -16,10 +18,10 @@ struct CsrRegion {
   // RtlpCurDirRef
   ULONG64 cur_dir_ref_offset_wow64{};
 
+  static std::optional<CsrRegion> GetForCurrentProcess();
+
   void ResetNative() const;
 #ifndef _WIN64
   void ResetWow64() const;
 #endif  // _WIN64
 };
-
-bool GetCsrRegionInfo(CsrRegion* region_out_ptr);

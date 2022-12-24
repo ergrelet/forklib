@@ -9,8 +9,8 @@
 #include <string>
 
 // Uncodumented headers csrss stuff
+#include "csr_region.h"
 #include "csrss.h"
-#include "csrss_offsets.h"
 
 // ReWolf's library to fuck with 64-bit memory from 32-bit WoW64 programs
 #ifndef _WIN64
@@ -218,13 +218,7 @@ LONG WINAPI DiscardException(EXCEPTION_POINTERS* ExceptionInfo) {
 #endif
 
 DWORD fork(_Out_ LPPROCESS_INFORMATION lpProcessInformation) {
-  static auto csr_region_opt = []() -> std::optional<CsrRegion> {
-    CsrRegion csr_region;
-    if (!GetCsrRegionInfo(&csr_region)) {
-      return std::nullopt;
-    }
-    return csr_region;
-  }();
+  static auto csr_region_opt = CsrRegion::GetForCurrentProcess();
   if (!csr_region_opt.has_value()) {
     LOG("FORKLIB: GetCsrRegionInfo failed\n");
     return -1;
