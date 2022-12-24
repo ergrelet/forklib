@@ -6,7 +6,7 @@
 namespace forklib {
 
 BOOL NotifyCsrssParent(HANDLE hProcess, HANDLE hThread);
-BOOL ConnectCsrChild(const CsrRegion& csr_region);
+BOOL ConnectCsrChild(const CsrRegion& csr_region, bool is_windows_11);
 void ReopenStdioHandles();
 
 }  // namespace forklib

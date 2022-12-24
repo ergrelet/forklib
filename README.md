@@ -10,7 +10,6 @@ fuzzing. Many Windows APIs (*e.g.*, `user32` APIs) won't work seemlessly in fork
 ## How to Build
 
 ```
-# Use `cmake -B x64 -DFORKLIB_WINDOWS_11=ON` to build for Windows 11
 cmake -B x64
 cmake --build x64 --config Release -- -maxcpucount
 ```

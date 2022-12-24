@@ -22,6 +22,12 @@ FORKLIB_EXPORT DWORD Fork(_Out_ LPPROCESS_INFORMATION process_information) {
     return -1;
   }
 
+  static bool is_windows_11 = []() {
+    RTL_OSVERSIONINFOW version_info{};
+    RtlGetVersion(&version_info);
+    return version_info.dwBuildNumber >= 22000;
+  }();
+
   LOG("FORKLIB: Before the fork, my pid is %d\n",
       GetProcessId(GetCurrentProcess()));
 
@@ -87,7 +93,7 @@ FORKLIB_EXPORT DWORD Fork(_Out_ LPPROCESS_INFORMATION process_information) {
 #endif  // FORKLIB_RESTORE_STDIO
     LOG("I'm the child\n");
 
-    if (!ConnectCsrChild(csr_region_opt.value())) {
+    if (!ConnectCsrChild(csr_region_opt.value(), is_windows_11)) {
       ExitProcess(1);
     }
 

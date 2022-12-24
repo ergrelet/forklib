@@ -121,7 +121,7 @@ BOOL NotifyCsrssParent(HANDLE hProcess, HANDLE hThread) {
 // 10, Microsoft refactored Windows to rely less and less on csrss. Hence the
 // API and structures are much simpler on Windows 10 than Windows 7, and as a
 // result our job is much easier.
-BOOL ConnectCsrChild(const CsrRegion& csr_region) {
+BOOL ConnectCsrChild(const CsrRegion& csr_region, bool is_windows_11) {
   BOOL bIsWow64{};
   if (!IsWow64Process(GetCurrentProcess(), &bIsWow64)) {
     LOG("FORKLIB: IsWow64Process failed!\n");
@@ -160,8 +160,6 @@ BOOL ConnectCsrChild(const CsrRegion& csr_region) {
   void* pCtrlRoutine =
       (void*)GetProcAddress(GetModuleHandleA("kernelbase"), "CtrlRoutine");
   BOOLEAN ServerToServerCall;
-  // if (!NT_SUCCESS(CsrClientConnectToServer(L"\\Sessions\\" CSRSS_SESSIONID
-  // L"\\Windows", 1, &pCtrlRoutine, 8, &ServerToServerCall)))
   if (!NT_SUCCESS(CsrClientConnectToServer(ObjectDirectory, 1, &pCtrlRoutine,
                                            sizeof(void*),
                                            &ServerToServerCall))) {
@@ -170,17 +168,12 @@ BOOL ConnectCsrChild(const CsrRegion& csr_region) {
   }
 
   LOG("FORKLIB: Link Windows subsystem...\n");
-// passing &gfServerProcess is not necessary, actually? passing
-// &ServerToServerCall is okay?
-#ifdef FORKLIB_WINDOWS_11
-  char buf[0x248];  // this seem to just be all zero everytime?
-#else
-  char buf[0x240];
-#endif  // FORKLIB_WINDOWS_11
+  // passing &gfServerProcess is not necessary, actually? passing
+  // &ServerToServerCall is okay?
+  char buf[0x248]{};  // this seem to just be all zero everytime?
+  const ULONG buf_size = is_windows_11 ? 0x248 : 0x240;
   memset(buf, 0, sizeof(buf));
-  // if (!NT_SUCCESS(CsrClientConnectToServer(L"\\Sessions\\" CSRSS_SESSIONID
-  // L"\\Windows", 3, buf, 0x240, &ServerToServerCall)))
-  if (!NT_SUCCESS(CsrClientConnectToServer(ObjectDirectory, 3, buf, sizeof(buf),
+  if (!NT_SUCCESS(CsrClientConnectToServer(ObjectDirectory, 3, buf, buf_size,
                                            &ServerToServerCall))) {
     LOG("FORKLIB: CsrClientConnectToServer failed!\n");
     return FALSE;
