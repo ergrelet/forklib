@@ -4,6 +4,9 @@
 #include <cstdio>
 
 int main() {
+  HANDLE test_event = ::CreateEventA(nullptr, FALSE, FALSE, "TestEvent");
+  MarkAllHandlesInheritable();
+
   PROCESS_INFORMATION process_info = {0};
   const auto res = Fork(&process_info);
   if (res == -1) {
@@ -11,7 +14,6 @@ int main() {
     return 1;
   }
 
-  HANDLE test_event = ::CreateEventA(nullptr, FALSE, FALSE, "TestEvent");
   if (res != 0) {
     // Parent
     ::printf("forked process's PID is %lu\n", res);
