@@ -124,6 +124,11 @@ typedef NTSTATUS(NTAPI *CsrClientConnectToServer_t)(
 	OUT PBOOLEAN ServerToServerCall
 	);
 
+
+namespace forklib {
+
 extern CsrClientConnectToServer_t CsrClientConnectToServer;
 extern CsrClientCallServer_t CsrClientCallServer;
 extern CsrClientCallServer64_t CsrClientCallServer64;
+
+}  // namespace forklib

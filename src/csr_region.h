@@ -4,6 +4,8 @@
 
 #include <optional>
 
+namespace forklib {
+
 struct CsrRegion {
   // Csr*
   ULONG64 data_offset{};
@@ -25,3 +27,5 @@ struct CsrRegion {
   void ResetWow64() const;
 #endif  // _WIN64
 };
+
+}  // namespace forklib

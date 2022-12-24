@@ -1,5 +1,7 @@
 #pragma once
 
+namespace forklib {
+
 class DbgHelpContext {
  public:
   DbgHelpContext() {
@@ -13,3 +15,5 @@ class DbgHelpContext {
   bool InitializeSymbols();
   void CleanupSymbols();
 };
+
+}  // namespace forklib

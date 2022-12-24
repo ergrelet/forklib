@@ -19,6 +19,14 @@
 
 #include "logging.h"
 
+#ifdef FORKLIB_SHARED_LIB
+#define FORKLIB_EXPORT __declspec(dllexport)
+#else
+#define FORKLIB_EXPORT
+#endif
+
+namespace forklib {
+
 // When a new child process is spawned, the parent must call
 // CsrClientCallServer with API number BasepCreateProcess to notify
 // the csrss subsystem of the new process. However, this seems to
@@ -217,8 +225,11 @@ LONG WINAPI DiscardException(EXCEPTION_POINTERS* ExceptionInfo) {
 }
 #endif
 
-DWORD fork(_Out_ LPPROCESS_INFORMATION lpProcessInformation) {
-  static auto csr_region_opt = CsrRegion::GetForCurrentProcess();
+}  // namespace forklib
+
+extern "C" FORKLIB_EXPORT DWORD
+fork(_Out_ LPPROCESS_INFORMATION lpProcessInformation) {
+  static auto csr_region_opt = forklib::CsrRegion::GetForCurrentProcess();
   if (!csr_region_opt.has_value()) {
     LOG("FORKLIB: GetCsrRegionInfo failed\n");
     return -1;
@@ -261,7 +272,7 @@ DWORD fork(_Out_ LPPROCESS_INFORMATION lpProcessInformation) {
     LOG("FORKLIB: Result = %d\n", result);
 
 #ifdef FORKLIB_NOTIFY_CSRSS_FROM_PARENT
-    if (!NotifyCsrssParent(hProcess, hThread)) {
+    if (!forklib::NotifyCsrssParent(hProcess, hThread)) {
       LOG("FORKLIB: NotifyCsrssParent failed\n");
       TerminateProcess(hProcess, 1);
       return -1;
@@ -295,7 +306,7 @@ DWORD fork(_Out_ LPPROCESS_INFORMATION lpProcessInformation) {
 
 #ifdef FORKLIB_RESTORE_STDIO
     // Not safe to do fopen until after ConnectCsrChild
-    ReopenStdioHandles();
+    forklib::ReopenStdioHandles();
 #endif  // FORKLIB_RESTORE_STDIO
 
     return 0;

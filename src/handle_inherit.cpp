@@ -7,11 +7,17 @@
 #include "fork.h"
 #include "logging.h"
 
+#ifdef FORKLIB_SHARED_LIB
+#define FORKLIB_EXPORT __declspec(dllexport)
+#else
+#define FORKLIB_EXPORT
+#endif
+
 // This method simply iterates through all of the handles that are opened by the
 // current process, and call a callback on each one. This can also be used for
 // closing any dangling or leaked file handles to the input binary that we are
 // mutating in the fuzzer.
-extern "C" BOOL EnumerateProcessHandles(
+extern "C" FORKLIB_EXPORT BOOL EnumerateProcessHandles(
     void (*callback)(HANDLE, POBJECT_TYPE_INFORMATION, PUNICODE_STRING)) {
   if (callback == nullptr) {
     return FALSE;
@@ -113,9 +119,9 @@ void markHandle(HANDLE handle, POBJECT_TYPE_INFORMATION, PUNICODE_STRING) {
 
 // Mark all handles inheritble and uncloseable. See markHandle for more info.
 // This should be called just before starting the forkserver.
-extern "C" BOOL MarkAllHandles() { return EnumerateProcessHandles(markHandle); }
+extern "C" FORKLIB_EXPORT BOOL MarkAllHandles() { return EnumerateProcessHandles(markHandle); }
 
-extern "C" BOOL SuspendOtherThreads() {
+extern "C" FORKLIB_EXPORT BOOL SuspendOtherThreads() {
   HANDLE hThreadSnap = INVALID_HANDLE_VALUE;
   THREADENTRY32 te32;
   hThreadSnap = CreateToolhelp32Snapshot(TH32CS_SNAPTHREAD, 0);

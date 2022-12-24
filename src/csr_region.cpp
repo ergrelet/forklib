@@ -14,6 +14,8 @@
 #define CSR_REGION_END_SYM_X86 "ntdll!CsrInitOnceDone"
 #define RTL_CUR_DIR_REF_SYM "ntdll!RtlpCurDirRef"
 
+namespace forklib {
+
 static std::optional<CsrRegion> GetCsrRegionInfoNative();
 static std::optional<CsrRegion> GetCsrRegionInfoWow64();
 
@@ -185,3 +187,5 @@ static std::optional<CsrRegion> GetCsrRegionInfoWow64() {
 }
 
 #endif  // _WIN64
+
+}  // namespace forklib

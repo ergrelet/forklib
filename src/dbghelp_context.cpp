@@ -6,6 +6,8 @@
 
 #include "logging.h"
 
+namespace forklib {
+
 bool DbgHelpContext::InitializeSymbols() {
   if (!::SymInitialize(::GetCurrentProcess(), nullptr, FALSE)) {
     LOG("SymInitialize failed, 0x%X\n", ::GetLastError());
@@ -22,3 +24,5 @@ bool DbgHelpContext::InitializeSymbols() {
 }
 
 void DbgHelpContext::CleanupSymbols() { ::SymCleanup(::GetCurrentProcess()); }
+
+}  // namespace forklib
