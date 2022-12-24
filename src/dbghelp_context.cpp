@@ -14,8 +14,7 @@ bool DbgHelpContext::InitializeSymbols() {
     return false;
   }
 
-  auto sym_options = (::SymGetOptions() & ~SYMOPT_DEFERRED_LOADS) |
-                     SYMOPT_ALLOW_ABSOLUTE_SYMBOLS;
+  auto sym_options = ::SymGetOptions() | SYMOPT_ALLOW_ABSOLUTE_SYMBOLS;
 #ifdef _DEBUG
   sym_options |= SYMOPT_DEBUG;
 #endif
