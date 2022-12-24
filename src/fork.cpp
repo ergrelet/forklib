@@ -21,6 +21,16 @@
 
 namespace forklib {
 
+// Populate this from the parent only once, to reduce the overhead on the child
+// side
+static const DWORD kSessionId = []() {
+  DWORD session_id{};
+  ProcessIdToSessionId(GetProcessId(GetCurrentProcess()), &session_id);
+  return session_id;
+}();
+static void* pCtrlRoutine =
+    (void*)GetProcAddress(GetModuleHandleA("kernelbase"), "CtrlRoutine");
+
 // When a new child process is spawned, the parent must call
 // CsrClientCallServer with API number BasepCreateProcess to notify
 // the csrss subsystem of the new process. However, this seems to
@@ -131,35 +141,28 @@ BOOL ConnectCsrChild(const CsrRegion& csr_region, bool is_windows_11) {
   // Zero Csr fields???
   // Required or else Csr calls will crash
   LOG("FORKLIB: De-initialize ntdll csr data\n");
-  HMODULE ntdll = GetModuleHandleA("ntdll.dll");
 #ifdef _WIN64
-  LOG("FORKLIB: Csr data = %p\n", csr_region.data_offset);
+  LOG("FORKLIB: Csr data = %llx\n", csr_region.data_offset);
   csr_region.ResetNative();
 #else
-  LOG("FORKLIB: Csr data = %p\n", csr_region.data_offset);
+  LOG("FORKLIB: Csr data = %llx\n", csr_region.data_offset);
   csr_region.ResetNative();
 
   if (bIsWow64) {
-    DWORD64 ntdll64 = GetModuleHandle64(L"ntdll.dll");
-    LOG("FORKLIB: ntdll 64 = %llx\n", ntdll64);
+    LOG("FORKLIB: ntdll 64 = %llx\n", GetModuleHandle64(L"ntdll.dll"));
     LOG("FORKLIB: Csr data 64 = %llx\n", csr_region.data_offset_wow64);
     csr_region.ResetWow64();
   }
 #endif
 
-  DWORD session_id{};
-  ProcessIdToSessionId(GetProcessId(GetCurrentProcess()), &session_id);
-
   wchar_t ObjectDirectory[100]{};
   swprintf(ObjectDirectory, ARRAYSIZE(ObjectDirectory),
-           L"\\Sessions\\%d\\Windows", session_id);
-  LOG("FORKLIB: Session_id: %d\n", session_id);
+           L"\\Sessions\\%d\\Windows", kSessionId);
+  LOG("FORKLIB: Session_id: %d\n", kSessionId);
 
   // Not required?
   LOG("FORKLIB: Link Console subsystem...\n");
-  void* pCtrlRoutine =
-      (void*)GetProcAddress(GetModuleHandleA("kernelbase"), "CtrlRoutine");
-  BOOLEAN ServerToServerCall;
+  BOOLEAN ServerToServerCall{};
   if (!NT_SUCCESS(CsrClientConnectToServer(ObjectDirectory, 1, &pCtrlRoutine,
                                            sizeof(void*),
                                            &ServerToServerCall))) {
@@ -172,7 +175,6 @@ BOOL ConnectCsrChild(const CsrRegion& csr_region, bool is_windows_11) {
   // &ServerToServerCall is okay?
   char buf[0x248]{};  // this seem to just be all zero everytime?
   const ULONG buf_size = is_windows_11 ? 0x248 : 0x240;
-  memset(buf, 0, sizeof(buf));
   if (!NT_SUCCESS(CsrClientConnectToServer(ObjectDirectory, 3, buf, buf_size,
                                            &ServerToServerCall))) {
     LOG("FORKLIB: CsrClientConnectToServer failed!\n");
