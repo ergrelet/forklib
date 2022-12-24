@@ -5,7 +5,7 @@
 
 int main() {
   PROCESS_INFORMATION process_info = {0};
-  const auto res = fork(&process_info);
+  const auto res = Fork(&process_info);
   if (res == -1) {
     ::printf("fork failed\n");
     return 1;

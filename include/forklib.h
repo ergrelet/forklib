@@ -39,12 +39,9 @@ typedef struct _OBJECT_TYPE_INFORMATION {
 extern "C" {
 #endif
 
-FORKLIB_IMPORT DWORD fork(_Out_ LPPROCESS_INFORMATION lpProcessInformation);
-FORKLIB_IMPORT BOOL EnumerateProcessHandles(void (*)(HANDLE,
-                                                     POBJECT_TYPE_INFORMATION,
-                                                     PUNICODE_STRING));
-FORKLIB_IMPORT BOOL MarkAllHandles();
-FORKLIB_IMPORT BOOL SuspendOtherThreads();
+FORKLIB_IMPORT DWORD Fork(_Out_ LPPROCESS_INFORMATION process_information);
+FORKLIB_IMPORT BOOL MarkAllHandlesInheritable();
+FORKLIB_IMPORT BOOL SuspendAllOtherThreads();
 
 #ifdef __cplusplus
 }

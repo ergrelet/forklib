@@ -1,24 +1,29 @@
-#include "windows_phnt.h"
-//
-#include <TlHelp32.h>
+#include "handle_inherit.h"
 
 #include <cstdlib>
 
-#include "fork.h"
 #include "logging.h"
 
-#ifdef FORKLIB_SHARED_LIB
-#define FORKLIB_EXPORT __declspec(dllexport)
-#else
-#define FORKLIB_EXPORT
-#endif
+namespace forklib {
+
+// Marks a handle as inheritable by child (as handles are not inherited
+// by children by default on Windows), and also mark them as uncloseable
+// to prevent the forked child from closing any important handles. We
+// don't know what the fuzzing target will do, and we need to make sure
+// that we can reuse the same handles over and over again in our forkserver.
+void MarkHandle(HANDLE handle, POBJECT_TYPE_INFORMATION, PUNICODE_STRING) {
+  // SetHandleInformation(handle, HANDLE_FLAG_INHERIT |
+  // HANDLE_FLAG_PROTECT_FROM_CLOSE, HANDLE_FLAG_INHERIT |
+  // HANDLE_FLAG_PROTECT_FROM_CLOSE);
+  SetHandleInformation(handle, HANDLE_FLAG_INHERIT, HANDLE_FLAG_INHERIT);
+}
 
 // This method simply iterates through all of the handles that are opened by the
 // current process, and call a callback on each one. This can also be used for
 // closing any dangling or leaked file handles to the input binary that we are
 // mutating in the fuzzer.
-extern "C" FORKLIB_EXPORT BOOL EnumerateProcessHandles(
-    void (*callback)(HANDLE, POBJECT_TYPE_INFORMATION, PUNICODE_STRING)) {
+BOOL EnumerateProcessHandles(void (*callback)(HANDLE, POBJECT_TYPE_INFORMATION,
+                                              PUNICODE_STRING)) {
   if (callback == nullptr) {
     return FALSE;
   }
@@ -105,47 +110,4 @@ extern "C" FORKLIB_EXPORT BOOL EnumerateProcessHandles(
   return 0;
 }
 
-// Marks a handle as inheritable by child (as handles are not inherited
-// by children by default on Windows), and also mark them as uncloseable
-// to prevent the forked child from closing any important handles. We
-// don't know what the fuzzing target will do, and we need to make sure
-// that we can reuse the same handles over and over again in our forkserver.
-void markHandle(HANDLE handle, POBJECT_TYPE_INFORMATION, PUNICODE_STRING) {
-  // SetHandleInformation(handle, HANDLE_FLAG_INHERIT |
-  // HANDLE_FLAG_PROTECT_FROM_CLOSE, HANDLE_FLAG_INHERIT |
-  // HANDLE_FLAG_PROTECT_FROM_CLOSE);
-  SetHandleInformation(handle, HANDLE_FLAG_INHERIT, HANDLE_FLAG_INHERIT);
-}
-
-// Mark all handles inheritble and uncloseable. See markHandle for more info.
-// This should be called just before starting the forkserver.
-extern "C" FORKLIB_EXPORT BOOL MarkAllHandles() { return EnumerateProcessHandles(markHandle); }
-
-extern "C" FORKLIB_EXPORT BOOL SuspendOtherThreads() {
-  HANDLE hThreadSnap = INVALID_HANDLE_VALUE;
-  THREADENTRY32 te32;
-  hThreadSnap = CreateToolhelp32Snapshot(TH32CS_SNAPTHREAD, 0);
-  if (hThreadSnap == INVALID_HANDLE_VALUE) return (FALSE);
-  te32.dwSize = sizeof(THREADENTRY32);
-  if (!Thread32First(hThreadSnap, &te32)) {
-    CloseHandle(hThreadSnap);
-    return FALSE;
-  }
-  do {
-    if (te32.th32OwnerProcessID == GetCurrentProcessId()) {
-      if (te32.th32ThreadID != GetCurrentThreadId()) {
-        LOG("Yeet thread %d\n", te32.th32ThreadID);
-        HANDLE hYeet = OpenThread(THREAD_TERMINATE | THREAD_SUSPEND_RESUME,
-                                  FALSE, te32.th32ThreadID);
-        if (hYeet != nullptr) {
-          SuspendThread(hYeet);
-          CloseHandle(hYeet);
-        }
-      }
-    }
-  } while (Thread32Next(hThreadSnap, &te32));
-  LOG("Yeeted\n");
-
-  CloseHandle(hThreadSnap);
-  return TRUE;
-}
+}  // namespace forklib

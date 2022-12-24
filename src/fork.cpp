@@ -19,12 +19,6 @@
 
 #include "logging.h"
 
-#ifdef FORKLIB_SHARED_LIB
-#define FORKLIB_EXPORT __declspec(dllexport)
-#else
-#define FORKLIB_EXPORT
-#endif
-
 namespace forklib {
 
 // When a new child process is spawned, the parent must call
@@ -226,89 +220,3 @@ LONG WINAPI DiscardException(EXCEPTION_POINTERS* ExceptionInfo) {
 #endif
 
 }  // namespace forklib
-
-extern "C" FORKLIB_EXPORT DWORD
-fork(_Out_ LPPROCESS_INFORMATION lpProcessInformation) {
-  static auto csr_region_opt = forklib::CsrRegion::GetForCurrentProcess();
-  if (!csr_region_opt.has_value()) {
-    LOG("FORKLIB: GetCsrRegionInfo failed\n");
-    return -1;
-  }
-
-  LOG("FORKLIB: Before the fork, my pid is %d\n",
-      GetProcessId(GetCurrentProcess()));
-
-  PS_CREATE_INFO procInfo;
-  RtlZeroMemory(&procInfo, sizeof(procInfo));
-  HANDLE hProcess = NULL;
-  HANDLE hThread = NULL;
-  procInfo.Size = sizeof(PS_CREATE_INFO);
-
-#ifndef _WIN64
-  // WTF???? Discard *BIZARRE* segfault in ntdll from read fs:[0x18] that you
-  // can ignore???
-  LPTOP_LEVEL_EXCEPTION_FILTER oldFilter =
-      SetUnhandledExceptionFilter(DiscardException);
-#endif
-
-  // This is the part that actually does the forking. Everything else is just
-  // to clean up after the mess that's created afterwards
-  NTSTATUS result = NtCreateUserProcess(
-      &hProcess, &hThread, MAXIMUM_ALLOWED, MAXIMUM_ALLOWED, NULL, NULL,
-      PROCESS_CREATE_FLAGS_INHERIT_FROM_PARENT |
-          PROCESS_CREATE_FLAGS_INHERIT_HANDLES,
-      THREAD_CREATE_FLAGS_CREATE_SUSPENDED, NULL, &procInfo, NULL);
-
-#ifndef _WIN64
-  // Clear the exception handler installed earlier.
-  SetUnhandledExceptionFilter(oldFilter);
-#endif
-
-  if (!result) {
-    // Parent process
-    LOG("FORKLIB: I'm the parent\n");
-    LOG("FORKLIB: hThread = %p, hProcess = %p\n", hThread, hProcess);
-    LOG("FORKLIB: Thread ID = %x\n", GetThreadId(hThread));
-    LOG("FORKLIB: Result = %d\n", result);
-
-#ifdef FORKLIB_NOTIFY_CSRSS_FROM_PARENT
-    if (!forklib::NotifyCsrssParent(hProcess, hThread)) {
-      LOG("FORKLIB: NotifyCsrssParent failed\n");
-      TerminateProcess(hProcess, 1);
-      return -1;
-    }
-#endif  // FORKLIB_NOTIFY_CSRSS_FROM_PARENT
-
-    if (lpProcessInformation) {
-      lpProcessInformation->hProcess = hProcess;
-      lpProcessInformation->hThread = hThread;
-      lpProcessInformation->dwProcessId = GetProcessId(hProcess);
-      lpProcessInformation->dwThreadId = GetThreadId(hThread);
-    }
-
-    ResumeThread(hThread);  // allow the child to connect to Csr.
-    return GetProcessId(hProcess);
-  } else {
-    // Child process
-#ifdef FORKLIB_RESTORE_STDIO
-    // Remove these calls to improve performance, at the cost of losing stdio.
-    FreeConsole();
-    AllocConsole();
-    SetStdHandle(STD_INPUT_HANDLE, stdin);
-    SetStdHandle(STD_OUTPUT_HANDLE, stdout);
-    SetStdHandle(STD_ERROR_HANDLE, stderr);
-#endif  // FORKLIB_RESTORE_STDIO
-    LOG("I'm the child\n");
-
-    if (!ConnectCsrChild(csr_region_opt.value())) {
-      ExitProcess(1);
-    }
-
-#ifdef FORKLIB_RESTORE_STDIO
-    // Not safe to do fopen until after ConnectCsrChild
-    forklib::ReopenStdioHandles();
-#endif  // FORKLIB_RESTORE_STDIO
-
-    return 0;
-  }
-}

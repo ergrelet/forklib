@@ -1,8 +1,8 @@
 #pragma once
 
-#include <Windows.h>
-
 #include <optional>
+
+#include "windows_phnt.h"
 
 namespace forklib {
 

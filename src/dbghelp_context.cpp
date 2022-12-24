@@ -1,6 +1,6 @@
 #include "dbghelp_context.h"
 
-#include <Windows.h>
+#include "windows_phnt.h"
 //
 #include <DbgHelp.h>
 
