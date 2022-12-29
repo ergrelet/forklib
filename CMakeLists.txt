@@ -2,7 +2,7 @@ cmake_minimum_required(VERSION 3.12)
 
 project(forklib
   VERSION 0.3.0
-  LANGUAGES CXX
+  LANGUAGES CXX C
 )
 
 option(FORKLIB_BUILD_SHARED_LIB "Build forklib as a shared library" ON)

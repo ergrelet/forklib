@@ -1,1 +1,2 @@
-add_subdirectory("fork_test")
+add_subdirectory("fork_test_cpp")
+add_subdirectory("fork_test_c")
