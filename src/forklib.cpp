@@ -4,6 +4,7 @@
 
 #include "csr_region.h"
 #include "fork.h"
+#include "fork_settings.h"
 #include "handle_inherit.h"
 #include "logging.h"
 
@@ -15,14 +16,15 @@
 
 extern "C" {
 
-FORKLIB_EXPORT DWORD Fork(_Out_ LPPROCESS_INFORMATION process_information) {
-  static auto csr_region_opt = forklib::CsrRegion::GetForCurrentProcess();
+FORKLIB_EXPORT DWORD Fork(ForkSettings settings,
+                          _Out_ LPPROCESS_INFORMATION process_information) {
+  static const auto csr_region_opt = forklib::CsrRegion::GetForCurrentProcess();
   if (!csr_region_opt.has_value()) {
     LOG("FORKLIB: GetCsrRegionInfo failed\n");
     return -1;
   }
 
-  static bool is_windows_11 = []() {
+  static const bool is_windows_11 = []() {
     RTL_OSVERSIONINFOW version_info{};
     RtlGetVersion(&version_info);
     return version_info.dwBuildNumber >= 22000;
@@ -64,13 +66,12 @@ FORKLIB_EXPORT DWORD Fork(_Out_ LPPROCESS_INFORMATION process_information) {
     LOG("FORKLIB: Thread ID = %x\n", GetThreadId(hThread));
     LOG("FORKLIB: Result = %d\n", result);
 
-#ifdef FORKLIB_NOTIFY_CSRSS_FROM_PARENT
-    if (!forklib::NotifyCsrssParent(hProcess, hThread)) {
+    if (settings.notify_csrss_from_parent &&
+        !forklib::NotifyCsrssParent(hProcess, hThread)) {
       LOG("FORKLIB: NotifyCsrssParent failed\n");
       TerminateProcess(hProcess, 1);
       return -1;
     }
-#endif  // FORKLIB_NOTIFY_CSRSS_FROM_PARENT
 
     if (process_information != nullptr) {
       process_information->hProcess = hProcess;
@@ -83,24 +84,24 @@ FORKLIB_EXPORT DWORD Fork(_Out_ LPPROCESS_INFORMATION process_information) {
     return GetProcessId(hProcess);
   } else {
     // Child process
-#ifdef FORKLIB_RESTORE_STDIO
-    // Remove these calls to improve performance, at the cost of losing stdio.
-    FreeConsole();
-    AllocConsole();
-    SetStdHandle(STD_INPUT_HANDLE, stdin);
-    SetStdHandle(STD_OUTPUT_HANDLE, stdout);
-    SetStdHandle(STD_ERROR_HANDLE, stderr);
-#endif  // FORKLIB_RESTORE_STDIO
+    if (settings.restore_stdio) {
+      // Remove these calls to improve performance, at the cost of losing stdio.
+      FreeConsole();
+      AllocConsole();
+      SetStdHandle(STD_INPUT_HANDLE, stdin);
+      SetStdHandle(STD_OUTPUT_HANDLE, stdout);
+      SetStdHandle(STD_ERROR_HANDLE, stderr);
+    }
     LOG("I'm the child\n");
 
     if (!ConnectCsrChild(csr_region_opt.value(), is_windows_11)) {
       ExitProcess(1);
     }
 
-#ifdef FORKLIB_RESTORE_STDIO
-    // Not safe to do fopen until after ConnectCsrChild
-    forklib::ReopenStdioHandles();
-#endif  // FORKLIB_RESTORE_STDIO
+    if (settings.restore_stdio) {
+      // Not safe to do fopen until after ConnectCsrChild
+      forklib::ReopenStdioHandles();
+    }
 
     return 0;
   }

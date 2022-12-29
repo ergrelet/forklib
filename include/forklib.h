@@ -1,7 +1,9 @@
 #pragma once
 
+#define WINDOWS_LEAN_AND_MEAN
 #include <Windows.h>
-#include <winternl.h>
+
+#include "fork_settings.h"
 
 #ifdef FORKLIB_SHARED_LIB
 #define FORKLIB_IMPORT __declspec(dllimport)
@@ -9,38 +11,19 @@
 #define FORKLIB_IMPORT
 #endif
 
-typedef struct _OBJECT_TYPE_INFORMATION {
-  UNICODE_STRING TypeName;
-  ULONG TotalNumberOfObjects;
-  ULONG TotalNumberOfHandles;
-  ULONG TotalPagedPoolUsage;
-  ULONG TotalNonPagedPoolUsage;
-  ULONG TotalNamePoolUsage;
-  ULONG TotalHandleTableUsage;
-  ULONG HighWaterNumberOfObjects;
-  ULONG HighWaterNumberOfHandles;
-  ULONG HighWaterPagedPoolUsage;
-  ULONG HighWaterNonPagedPoolUsage;
-  ULONG HighWaterNamePoolUsage;
-  ULONG HighWaterHandleTableUsage;
-  ULONG InvalidAttributes;
-  GENERIC_MAPPING GenericMapping;
-  ULONG ValidAccessMask;
-  BOOLEAN SecurityRequired;
-  BOOLEAN MaintainHandleCount;
-  UCHAR TypeIndex;  // since WINBLUE
-  CHAR ReservedByte;
-  ULONG PoolType;
-  ULONG DefaultPagedPoolCharge;
-  ULONG DefaultNonPagedPoolCharge;
-} OBJECT_TYPE_INFORMATION, *POBJECT_TYPE_INFORMATION;
-
 #ifdef __cplusplus
 extern "C" {
 #endif
 
-FORKLIB_IMPORT DWORD Fork(_Out_ LPPROCESS_INFORMATION process_information);
+// Forks the current process and continue execution in both processes.
+// Returns -1 (0xFFFFFFFF) in case of error. In case of success, returns 0
+// inside of the child process and returns the child's PID in the parent
+// process.
+FORKLIB_IMPORT DWORD Fork(ForkSettings settings,
+                          _Out_ LPPROCESS_INFORMATION process_information);
+// Marks all handles in the current process as inheritable.
 FORKLIB_IMPORT BOOL MarkAllHandlesInheritable();
+// Suspends all threads in the process but the calling one.
 FORKLIB_IMPORT BOOL SuspendAllOtherThreads();
 
 #ifdef __cplusplus

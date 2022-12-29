@@ -14,10 +14,6 @@ processes.
 cmake -B x64
 cmake --build x64 --config Release -- -maxcpucount
 ```
-Note: You may want to set the `FORKLIB_NOTIFY_CSRSS_FROM_PARENT` and
-`FORKLIB_RESTORE_STDIO` CMake options to `OFF` if you plan to build the library
-for `winnie`, as it reduce the overhead of the forking at the cost of reducing
-available Win32 functionalities in the child.
 
 ## How to Use
 
@@ -28,3 +24,5 @@ symbol server path in the `_NT_SYMBOL_PATH` environment variable.
 You must copy `dbghelp.dll` and `symsrv.dll` from the `ext` folder in your
 harness' working directory for the symbols to be automatically fetched from a
 SymSrv path.
+
+Note: the public interface is different from winnie's original forklib.
